@@ -83,9 +83,9 @@ module "ec2_instance" {
   monitoring                  = true
   associate_public_ip_address = true
   user_data                   = file("installation1.sh")
-  ami = data.aws_ami.amazon_linux.id
+  ami                         = data.aws_ami.amazon_linux.id
   availability_zone           = data.aws_availability_zones.azs.names[0]
-  
+
   root_block_device = {
     volume_size = 30
   }

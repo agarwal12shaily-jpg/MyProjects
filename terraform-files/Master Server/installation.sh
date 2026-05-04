@@ -1,160 +1,91 @@
 #!/bin/bash
-set -euxo pipefail
+set -x
 
-# Update system
-yum update -y
+exec > /var/log/user-data.log 2>&1
 
-# Install base tools
-yum install -y wget git unzip tar yum-utils fontconfig
+# Wait for boot completion
+sleep 40
 
-# Install Java (recommended on AWS)
-yum install -y java-21-amazon-corretto
+dnf update -y
 
-# Verify Java
-java -version
+# Base packages
+dnf install -y \
+git \
+wget \
+curl \
+unzip \
+tar \
+zip \
+which \
+nano \
+python3 \
+amazon-ec2-instance-connect \
+java-21-amazon-corretto \
+maven \
+docker
 
-# Add Jenkins repo
+# Enable services
+systemctl enable docker
+systemctl start docker
+
+systemctl enable sshd
+systemctl restart sshd
+
+# Users to docker group
+usermod -aG docker ec2-user
+
+# Jenkins Repo
 wget -O /etc/yum.repos.d/jenkins.repo \
-https://pkg.jenkins.io/rpm-stable/jenkins.repo
+https://pkg.jenkins.io/redhat-stable/jenkins.repo
 
 rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
-# Install Jenkins
-yum install -y jenkins
+# Jenkins install
+dnf install -y jenkins
 
-# Ensure JAVA_HOME for Jenkins
-mkdir -p /etc/systemd/system/jenkins.service.d
-
-cat > /etc/systemd/system/jenkins.service.d/override.conf <<EOF
-[Service]
-Environment="JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto"
-EOF
-
-# Reload systemd and start Jenkins
 systemctl daemon-reload
 systemctl enable jenkins
-systemctl restart jenkins
+systemctl start jenkins
 
-# Install Git
-sudo yum install git -y
-
-# Install Terraform
-yum install -y yum-utils
-yum-config-manager --add-repo \
-https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
-
-yum install -y terraform
-
-# Install Maven
-yum install -y maven
-
-# Install Docker
-yum install -y docker
-systemctl enable docker
-systemctl start docker
-# Add ec2-user to docker group
-usermod -aG docker ec2-user
-
-# Add Jenkins user to Docker group
 usermod -aG docker jenkins
 
-# Restart docker and Jenkins
-systemctl restart docker
-systemctl restart jenkins
+# Terraform
+dnf config-manager --add-repo \
+https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
 
-yum install -y trivy
+dnf install -y terraform
 
-# Install Ansible
-yum install -y ansible
+# Trivy
+cat <<EOF > /etc/yum.repos.d/trivy.repo
+[trivy]
+name=Trivy Repo
+baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/\$basearch/
+enabled=1
+gpgcheck=0
+EOF
 
-# Show versions
-terraform version
-java version
-mvn version
-docker version
-systemctl status jenkins --no-pager
-trivy version
-ansible version
+dnf install -y trivy
 
-# Install kubectl
+# Ansible
+dnf install -y ansible
+
+# kubectl
 curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
 chmod +x kubectl
 mv kubectl /usr/local/bin/
 
+# Restart services
+systemctl restart docker
+systemctl restart jenkins
 
+# Versions
+java -version
+terraform version
+docker --version
+mvn -version
+kubectl version --client
+trivy --version
+ansible --version
 
-
-
-
-
-#set -e
-
-# Log user-data output
-#exec > /var/log/user-data.log 2>&1
-
-#echo "Starting server configuration..."
-
-# Wait for network / cloud-init completion
-#sleep 30
-
-# Update packages
-#dnf update -y
-
-# Install base tools
-#dnf install -y git wget curl unzip tar
-
-# Install Java 17
-#dnf install -y java-17-amazon-corretto
-
-# Install Maven
-#dnf install -y maven
-
-# Install Docker
-#dnf install -y docker
-#systemctl enable docker
-#systemctl start docker
-
-# Add ec2-user to docker group
-#usermod -aG docker ec2-user
-
-# Jenkins repo
-#wget -O /etc/yum.repos.d/jenkins.repo \
-#https://pkg.jenkins.io/redhat-stable/jenkins.repo
-
-#rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-
-# Install Jenkins
-#dnf install -y jenkins
-#systemctl enable jenkins
-#systemctl start jenkins
-
-# Add Jenkins user to Docker group
-#usermod -aG docker jenkins
-
-# Restart docker and Jenkins
-#systemctl restart docker
-#systemctl restart jenkins
-
-# Install Trivy (latest repo method)
-#cat <<EOF > /etc/yum.repos.d/trivy.repo
-#[trivy]
-#name=Trivy repository
-#baseurl=https://aquasecurity.github.io/trivy-repo/rpm/releases/\$basearch/
-#gpgcheck=0
-#enabled=1
-#EOF
-
-#dnf install -y trivy
-
-# Install Ansible
-#dnf install -y ansible
-
-# Show versions
-#java -version
-#mvn -version
-#docker --version
-#jenkins --version || true
-#trivy --version
-#ansible --version
-
-#echo "Installation completed successfully."
+# Jenkins password
+cat /var/lib/jenkins/secrets/initialAdminPassword
